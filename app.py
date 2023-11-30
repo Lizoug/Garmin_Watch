@@ -15,7 +15,9 @@ with col1:
 with col2:
     password = st.text_input("Enter password:", type="password")
 
-if email and password is not None:
+login_verify = st.button("Login", type="primary")
+
+if login_verify:
     garmin = sb.login(email, password)
     # Remove password to prevent continuously API request
     password = ""
@@ -28,17 +30,18 @@ with col1:
 with col2:
     DURATION = st.number_input("Duration", value=14)
 
-dataframe = sb.get_sleep_data(garmin, end_date=END_DATE, duration=DURATION)
-st.write(dataframe)
+if login_verify:
+    dataframe = sb.get_sleep_data(garmin, end_date=END_DATE, duration=DURATION)
+    st.write(dataframe)
 
-st.subheader("Save the file")
-# Option to save the dataframe as JSON
-json_string = dataframe.to_json(orient='records', lines=True)
+    st.subheader("Save the file")
+    # Option to save the dataframe as JSON
+    json_string = dataframe.to_json(orient='records', lines=True)
 
-# Download button to download JSON
-st.download_button(
-    label="Download data as JSON",
-    file_name='sleep_data.json',
-    mime='application/json',
-    data=json_string
-)
+    # Download button to download JSON
+    st.download_button(
+        label="Download data as JSON",
+        file_name='sleep_data.json',
+        mime='application/json',
+        data=json_string
+    )
