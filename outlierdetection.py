@@ -8,13 +8,18 @@ import os
 from getpass import getpass
 from datetime import date, timedelta
 import pandas as pd
-
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
 
 pd.set_option("display.max_rows", None)
 pd.set_option("display.max_columns", None)
 
-email = input("Enter email address: ")
-password = getpass("Enter password: ")
+#email = input("Enter email address: ")
+#password = getpass("Enter password: ")
+
+email = "miriam.agrawala@study.hs-duesseldorf.de"
+password = "Garmin1Garmin"
+
 garmin = garminconnect.Garmin(email, password)
 garmin.login()
 garmin.display_name
@@ -70,3 +75,59 @@ featurevector_timeseries_pandas, featurevector_timeseries_numpy = featurevector_
 print(featurevector_timeseries_numpy)
 print(type(featurevector_timeseries_numpy))
 print(featurevector_timeseries_numpy.shape)
+
+pca = PCA().fit(featurevector_timeseries_numpy)
+plt.plot(np.cumsum(pca.explained_variance_ratio_))
+plt.xlabel('number of components')
+plt.ylabel('cumulative explained variance')
+
+
+# create a PCA object
+pca = PCA(n_components=3)  # Reduce to 3 features
+reduced_data_pca = pca.fit_transform(featurevector_timeseries_numpy.T)  # Transpose to get correct shape
+
+print(reduced_data_pca.shape)  # Should print (7007, 3)
+
+# Create the model
+iso_forest = IsolationForest(
+    n_estimators=100,
+    contamination=0.1,
+    n_jobs=-1,
+    random_state=42,
+    verbose=0)
+
+# Fit the model
+iso_forest.fit(reduced_data_pca)
+
+# Predict degree of anomaly
+scores_pred = iso_forest.decision_function(reduced_data_pca)
+
+# Set the threshold
+threshold = -0.1  # Adjust this value to suit your needs
+
+# Classify data points as outliers if their anomaly score is less than the threshold
+outlier_classification = np.where(scores_pred < threshold, -1, 1)
+
+fig, ax = plt.subplots(figsize=(6, 6), dpi=200)
+scatter = ax.scatter(reduced_data_pca[:, 0], reduced_data_pca[:, 1],
+           c=scores_pred, cmap="plasma",
+           alpha=0.5)
+
+# Adding a colorbar
+cbar = plt.colorbar(scatter, ax=ax)
+cbar.set_label('Anomaly Degree')
+plt.grid(True)
+plt.show()
+
+
+# find out which samples are the outliers
+outlier_indices = np.where(outlier_classification == -1)[0]
+print("Outlier indices:", outlier_indices)
+print("Number of outliers:", len(outlier_indices))
+
+# Transpose the DataFrame
+featurevector_timeseries_pandas_transposed = featurevector_timeseries_pandas.transpose()
+
+# Get the outlier rows from the transposed DataFrame
+outlier_rows = featurevector_timeseries_pandas_transposed.iloc[outlier_indices]
+print("Outlier rows:", outlier_rows)
