@@ -1,4 +1,4 @@
-import datetime
+from datetime import date, timedelta
 import pandas as pd
 import numpy as np
 
@@ -24,92 +24,121 @@ def convert_num(input_value):
 
 def delete_untracked_nights(df):
     """
-    Delete the untracked nights by using the restlessMomentsCount.
+    Delete the untracked nights by using the restlessMomentsCount & sleepMovement. 
     This is because restless moments are only registered in the watch when sleep is detected.
-    The subset was -restlessMomentsCount-.
     """
-    return df.dropna(subset=["sleepMovement"]).reset_index(drop=True) # reset the index
+    return df.dropna(subset=["sleepMovement", "restlessMomentsCount"]).reset_index(drop=True) # reset the index
 
-def featurevector_timeseries(df):
+def convert_timestamps(df, timestamp_column, time_offset_hours=0):
     """
-    Function that returns the time-sensitive readings from the watch as feature vectors in form of pandas dataframe and numpy array.
-    The columns that are processed together are done so due to their common format.
-    -    startGMT: sleepRestlessMoments, hrvData, sleepBodyBattery, sleepStress, sleepHeartRate
-    -    startTimeGMT: welnessEpochRespirationDataDTOList
-    -    startGMT - endGMT: sleepLevels
-    """
+    Function that converts timestamps in a dataframe to a timezone-aware datetime format.
+    """ 
+    # Convert timestamp column to datetime
+    df[timestamp_column] = pd.to_datetime(df[timestamp_column], unit='ms')
 
-    #preliminary_featurevector_allnights = pd.DataFrame()
-    preliminary_featurevector_allnights = pd.DataFrame(index=["sleepRestlessMoments", "hrvData", "sleepStress", "sleepBodyBattery", "sleepHeartRate", "wellnessEpochRespirationDataDTOList", "sleepLevels"])
-    # iterate over indeces of df to only process one day at a time
+    # Convert GMT to local time by adding the specified number of hours
+    #local_time_column = "startLocal"
+    df[timestamp_column] = df[timestamp_column] + timedelta(hours=time_offset_hours)
 
-    for i in df.index:
-        # initialize empty Dataframe. This will be filled line by line with each iteration, adding a different feature in each row
-        preliminary_featurevector = pd.DataFrame()
-        sleep_one_day = df.iloc[i] ### may use loc instead of iloc
-        # columns that use "startGMT" as name for their timecolumn
-        columns_startGMT = ["sleepRestlessMoments", "hrvData", "sleepStress", "sleepBodyBattery", "sleepHeartRate"]
+    return df
 
-        # iterate over different columns
-        for c in columns_startGMT:
-            column_df = [pd.json_normalize(item) for item in sleep_one_day[c]]
-            column_df = pd.concat(column_df, ignore_index=True)
-            
-            column_df["Real Time"] = [datetime.datetime.fromtimestamp(i) for i in column_df["startGMT"] / 1000]
-            column_df["Real Time"] = pd.to_datetime(column_df["Real Time"])
-            # make Real Time the index of the dataframe
-            column_df.index = column_df["Real Time"]
-            del column_df["Real Time"]
-            del column_df["startGMT"]
-            column_df = column_df.rename(columns = {column_df.columns[0]: c})
-                    
-            # resample: insert timesteps for each minute
-            column_df_interpolate = column_df.resample('T').mean()
-            # interpolate values to fill the new, empty time steps
-            column_df_interpolate[c] = column_df_interpolate[c].interpolate()
-            # drop unneeded columns, swap axes
-            column_df_interpolate_transposed = column_df_interpolate.T
-            # add to feature vector
-            preliminary_featurevector = pd.concat([preliminary_featurevector, column_df_interpolate_transposed], axis=0)
+def extract_value(df):
+    interested_columns = ["sleepRestlessMoments", "hrvData", "sleepStress", "sleepBodyBattery", 
+                      "sleepHeartRate", "wellnessEpochRespirationDataDTOList", "sleepLevels"]
+    dfs= []
+    for column in interested_columns:
+        if column == 'sleepLevels':
+            # column with startGMT, endGMT and activityLevel
+            # 3 columns in total
+            df1 = pd.concat([pd.json_normalize(item) for item in df[column]])
+            # change the date from string to datetime
+            df1['startGMT'] = pd.to_datetime(df1['startGMT'])
+            # add 1 hour timedelta, to get local time
+            df1['startGMT'] += timedelta(hours=1)
+            df1.drop("endGMT", axis='columns', inplace=True)
+            # we need to rename the column activityLevel to sleepLevel_value
+            df1.rename(columns={'activityLevel': 'sleepLevel_value'}, inplace=True)
+        elif column == 'wellnessEpochRespirationDataDTOList':
+            # 2 columns startTimeGMT and value
+            # column start with startTimeGMT
+            df2 = pd.concat([pd.json_normalize(item) for item in df[column]])
+            df2.rename(columns={'startTimeGMT': 'startGMT', 
+                                'value': f'{column}_value'}, inplace=True)
+            convert_timestamps(df2, 'startGMT', 1)
+            ### we need to rename the column value to f"{column_name}_value"
+        else:
+            # 2 columns, startGMT and value
+            df3 = pd.concat([pd.json_normalize(item) for item in df[column]])
+            convert_timestamps(df3, 'startGMT', 1)
+            ### we need to rename the column value to f"{column_name}_value"
+            df3.rename(columns={'value': f'{column}_value'}, inplace=True)
+            dfs.append(df3)
 
-            
-        # sleep_one_day["wellnessEpochRespirationDataDTOList"] uses "startTimeGMT" as name for their time columns, so it has to be processed separately
-        wellnessEpochRespiration_df = [pd.json_normalize(item) for item in sleep_one_day["wellnessEpochRespirationDataDTOList"]]
-        wellnessEpochRespiration_df = pd.concat(wellnessEpochRespiration_df, ignore_index=True)
-        
-        wellnessEpochRespiration_df["Real Time"] = [datetime.datetime.fromtimestamp(i) for i in wellnessEpochRespiration_df["startTimeGMT"] / 1000]
-        wellnessEpochRespiration_df["Real Time"] = pd.to_datetime(wellnessEpochRespiration_df["Real Time"])
-        wellnessEpochRespiration_df.index = wellnessEpochRespiration_df["Real Time"]
-        del wellnessEpochRespiration_df["Real Time"]
-        del wellnessEpochRespiration_df["startTimeGMT"]
-        wellnessEpochRespiration_df = wellnessEpochRespiration_df.rename(columns = {wellnessEpochRespiration_df.columns[0]: "wellnessEpochRespirationDataDTOList"})
-        
-        wellnessEpochRespiration_df_interpolate = wellnessEpochRespiration_df.resample('T').mean()
-        wellnessEpochRespiration_df_interpolate['wellnessEpochRespirationDataDTOList'] = wellnessEpochRespiration_df_interpolate['wellnessEpochRespirationDataDTOList'].interpolate()
-        wellnessEpochRespiration_df_interpolate_transposed = wellnessEpochRespiration_df_interpolate.T
-        preliminary_featurevector = pd.concat([preliminary_featurevector, wellnessEpochRespiration_df_interpolate_transposed], axis=0)
+    return df1, df2, dfs
 
+def merge_extracted_dataframes(main_df):
+    # Extract the first two DataFrames and the list of DataFrames using the extract_value function
+    df1 = extract_value(main_df)[0].set_index('startGMT')
+    df2 = extract_value(main_df)[1].set_index('startGMT')
+    df_list = extract_value(main_df)[2]
+ 
+    # Merge df1 and df2 first. They are merged on their indices.
+    merged_df = df1.merge(df2, left_index=True, right_index=True, how='outer')
+ 
+    # Iteratively merge each DataFrame in df_list with merged_df
+    for df in df_list:
+        df.set_index('startGMT', inplace=True)  # Set 'startGMT' as the index for each DataFrame in df_list
+        merged_df = merged_df.merge(df, left_index=True, right_index=True, how='outer')  # Adjust the merge type as necessary
+ 
+    return merged_df
 
-        # in sleep_one_day['sleepLevels'] the sleep levels are displayed in intervalls from startGMT to endGMT
-        # .ffil was used for forward filling, so that all timesteps (per minute) in the interval would have the same value
-        sleepLevels_df = [pd.json_normalize(item) for item in sleep_one_day['sleepLevels']]
-        sleepLevels_df = pd.concat(sleepLevels_df, ignore_index=True)
-        
-        sleepLevels_df["startGMT"] = pd.to_datetime(sleepLevels_df["startGMT"])
-        sleepLevels_df.index = sleepLevels_df["startGMT"]
-        del sleepLevels_df["startGMT"]
-        del sleepLevels_df["endGMT"]
-        sleepLevels_df = sleepLevels_df.rename(columns = {sleepLevels_df.columns[0]: "sleepLevels"})
-        #.ffil -> forward fill, replace all NaN values with the last numeric value that occured
-        sleepLevels_ffil = sleepLevels_df.resample("T").ffill()
-        sleepLevels_ffil = sleepLevels_ffil.T
-        preliminary_featurevector = pd.concat([preliminary_featurevector, sleepLevels_ffil], axis=0)
-        preliminary_featurevector_allnights = preliminary_featurevector_allnights.merge(preliminary_featurevector, left_index=True, right_index=True)
-        
+def generate_columns_to_interpolate(columns_to_rename):
+    columns_to_interpolate = []
+    for string in columns_to_rename:
+        columns_to_interpolate.append(f"{string}_value")
+    columns_to_interpolate.append('respirationValue')
+    return columns_to_interpolate
+ 
+def interpolate_dataframe(merged_df, columns_to_interpolate):
+    interpolated_df = merged_df.copy()
+    for column in columns_to_interpolate:
+        if column in ['sleepLevel_value', 'sleepRestlessMoments_value']:
+            # Use forward fill for these columns
+            interpolated_df[column] = interpolated_df[column].ffill() # same as interpolation (pad method)
+            interpolated_df[column] = interpolated_df[column].bfill() # backward fill the NaN values
+        else:
+            # Use time interpolation for other columns
+            interpolated_df[column] = interpolated_df[column].interpolate(method='time') # interpolation (time)
+            interpolated_df[column] = interpolated_df[column].bfill() # backward fill the NaN values
+    return interpolated_df
 
-    # replace all NaNs with 0
-    preliminary_featurevector_allnights = preliminary_featurevector_allnights.fillna(0)
-    # convert to numpy for usage as feature vector
-    preliminary_featurevector_allnights_np = preliminary_featurevector_allnights.to_numpy()
+def main_interpolation(original_df):
+    # Step 1: Delete untracked nights
+    cleaned_df = delete_untracked_nights(original_df)
 
-    return preliminary_featurevector_allnights, preliminary_featurevector_allnights_np
+    # Extrahieren der Schlafstart- und -endzeiten in einem neuen DataFrame
+    df_temp = pd.json_normalize(cleaned_df['dailySleepDTO'])[['sleepStartTimestampLocal', 'sleepEndTimestampLocal']]
+    df_temp['sleepStartTimestampLocal'] = pd.to_datetime(df_temp['sleepStartTimestampLocal'], unit='ms')
+    df_temp['sleepEndTimestampLocal'] = pd.to_datetime(df_temp['sleepEndTimestampLocal'], unit='ms')
+
+    # Step 2: Merge the extracted DataFrames
+    merged_df = merge_extracted_dataframes(cleaned_df)
+
+    # Step 3: Generate column names for interpolation
+    columns_to_rename = ["sleepRestlessMoments", "hrvData", "sleepStress", "sleepBodyBattery",
+                         "sleepHeartRate", "sleepLevel"]
+    columns_to_interpolate = generate_columns_to_interpolate(columns_to_rename)
+
+    # Step 4: Resample and interpolate
+    resampled_df = merged_df.resample('T').mean()  # Diskutieren, ob eine oder zwei Minuten
+    final_processed_df = interpolate_dataframe(resampled_df, columns_to_interpolate)
+
+    # Step 5: Split the night separately
+    night_dfs = {}
+    for index, row in df_temp.iterrows():
+        start = row['sleepStartTimestampLocal']
+        end = row['sleepEndTimestampLocal']
+        filtered_df = final_processed_df[start:end]
+        night_dfs[index] = filtered_df
+
+    return night_dfs  # Return a dictionary of night DataFrames
