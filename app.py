@@ -4,6 +4,7 @@ import os
 import garminconnect
 import streamlit_backend as sb
 import json
+from datetime import date, timedelta
 
 st.title("Sleep Data")
 
@@ -26,9 +27,9 @@ st.subheader("Duration of study")
 # Create weekly df
 col1, col2 = st.columns(2)
 with col1:
-    END_DATE = st.date_input("Select last desired date", value="today")
+    END_DATE = st.date_input("Select last observed date", value=date(2023, 12, 31))
 with col2:
-    DURATION = st.number_input("Duration", value=14)
+    DURATION = st.number_input("Duration", value=31)
 
 if login_verify:
     dataframe = sb.get_sleep_data(garmin, end_date=END_DATE, duration=DURATION)
