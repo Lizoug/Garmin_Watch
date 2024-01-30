@@ -8,6 +8,14 @@ from datetime import date, timedelta
 
 st.title("Sleep Data")
 
+st.subheader("Duration of study")
+# Create weekly df
+col1, col2 = st.columns(2)
+with col1:
+    END_DATE = st.date_input("Select last observed date", value=date(2023, 12, 31))
+with col2:
+    DURATION = st.number_input("Duration", value=31)
+
 st.subheader("Login")
 # LOGIN container
 col1, col2 = st.columns(2)
@@ -22,14 +30,6 @@ if login_verify:
     garmin = sb.login(email, password)
     # Remove password to prevent continuously API request
     password = ""
-
-st.subheader("Duration of study")
-# Create weekly df
-col1, col2 = st.columns(2)
-with col1:
-    END_DATE = st.date_input("Select last observed date", value=date(2023, 12, 31))
-with col2:
-    DURATION = st.number_input("Duration", value=31)
 
 if login_verify:
     dataframe = sb.get_sleep_data(garmin, end_date=END_DATE, duration=DURATION)
