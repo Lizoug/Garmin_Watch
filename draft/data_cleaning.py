@@ -34,7 +34,7 @@ def delete_untracked_nights(df):
     # remove NaN in these 2 columns
     df = df.dropna(subset=["sleepMovement", "restlessMomentsCount"]).reset_index(drop=True) # reset the index
 
-    return df.dropna(axis='rows')
+    return df.dropna(axis='rows').reset_index(drop=True)
 
 def convert_timestamps(df, timestamp_column, time_offset_hours=0):
     """
