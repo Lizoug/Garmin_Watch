@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 import pandas as pd
-import numpy as np
+from sklearn.preprocessing import MinMaxScaler
 
 def normalize_and_rename_columns(df, column_name, prefix_to_remove=None):
     # Normalize the specified column
@@ -27,7 +27,14 @@ def delete_untracked_nights(df):
     Delete the untracked nights by using the restlessMomentsCount & sleepMovement. 
     This is because restless moments are only registered in the watch when sleep is detected.
     """
-    return df.dropna(subset=["sleepMovement", "restlessMomentsCount"]).reset_index(drop=True) # reset the index
+    # remove empty list from this column
+    mask = df['sleepMovement'].apply(lambda x: x == [])
+    df = df[~mask]
+
+    # remove NaN in these 2 columns
+    df = df.dropna(subset=["sleepMovement", "restlessMomentsCount"]).reset_index(drop=True) # reset the index
+
+    return df.dropna(axis='rows')
 
 def convert_timestamps(df, timestamp_column, time_offset_hours=0):
     """
@@ -112,6 +119,18 @@ def interpolate_dataframe(merged_df, columns_to_interpolate):
             interpolated_df[column] = interpolated_df[column].bfill() # backward fill the NaN values
     return interpolated_df
 
+def normalize_data(df):
+    # Initialize the Min-Max scaler
+    scaler = MinMaxScaler()
+
+    # Normalize the DataFrame using the scaler
+    normalized_array = scaler.fit_transform(df)
+
+    # Convert the normalized NumPy array back into a DataFrame
+    normalized_df = pd.DataFrame(normalized_array, columns=df.columns, index=df.index)
+
+    return normalized_df
+
 def main_interpolation(original_df):
     # Step 1: Delete untracked nights
     cleaned_df = delete_untracked_nights(original_df)
@@ -133,12 +152,15 @@ def main_interpolation(original_df):
     resampled_df = merged_df.resample('T').mean()  # Diskutieren, ob eine oder zwei Minuten
     final_processed_df = interpolate_dataframe(resampled_df, columns_to_interpolate)
 
+    # Normalize with MinMaxScaler()
+    df_normalized = normalize_data(final_processed_df)
+
     # Step 5: Split the night separately
     night_dfs = {}
     for index, row in df_temp.iterrows():
         start = row['sleepStartTimestampLocal']
         end = row['sleepEndTimestampLocal']
-        filtered_df = final_processed_df[start:end]
+        filtered_df = df_normalized[start:end]
         night_dfs[index] = filtered_df
 
     return night_dfs  # Return a dictionary of night DataFrames
