@@ -1,1 +1,6 @@
+# datasets
 *.json
+*.xlsx
+
+#pycache
+*.pyc
