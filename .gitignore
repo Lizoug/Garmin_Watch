@@ -1,6 +1,8 @@
 # datasets
 *.json
 *.xlsx
+*.pkl
+*.h5
 
 #pycache
 *.pyc
