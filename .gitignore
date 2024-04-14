@@ -3,6 +3,8 @@
 *.xlsx
 *.pkl
 *.h5
+*.npy
+*.png
 
 #pycache
 *.pyc
