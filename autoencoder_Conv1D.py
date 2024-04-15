@@ -236,7 +236,7 @@ for person_data in time_series_list:
             embeddings_df.columns = new_column_names
 
             # Save the DataFrame as a pickle file
-            file_name = f"datasets/embeddings_100/embeddings_{value}.pkl"
+            file_name = f"datasets/embeddings/embeddings_{value}.pkl"
             embeddings_df.to_pickle(file_name)
 
             # Reset the embeddings dictionary for the next person
