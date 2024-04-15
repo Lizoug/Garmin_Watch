@@ -8,3 +8,6 @@
 
 #pycache
 *.pyc
+
+# Jupyter Notebook
+.ipynb_checkpoints
